@@ -1,10 +1,18 @@
-from typing import Sequence, List, Set, Union, Any, Callable, Optional
 from copy import deepcopy
+from typing import Any, Callable, List, Optional, Sequence, Set, Union
 
-from fsmlib.state import NFAState, DFAState, MooreState, MealyState
+from fsmlib.automata.state import DFAState, NFAState
 
 
 class NFA:
+    """A class representing a NFA.
+
+    :param initial: the initial state of the NFA
+    :param current: the current state of the NFA
+    :param alphabet: the alphabet of the NFA
+    :param empty_char: the empty character used in the NFA
+    """
+
     initial: NFAState
     current: NFAState
     alphabet: List[Any]
@@ -19,6 +27,11 @@ class NFA:
             raise ValueError(f"Empty character must not be in alphabet.")
 
     def accept(self, sequence: Sequence) -> bool:
+        """Checks if the NFA is accepting the given sequence.
+
+        :param sequence: the sequence to be checked
+        :return: True if the NFA is accepting the given sequence, False otherwise
+        """
         return self._accept(sequence, self.initial)
 
     def _accept(self, sequence: Sequence, node: NFAState) -> bool:
@@ -41,16 +54,18 @@ class NFA:
 
     def __repr__(self) -> str:
         return "\n".join(
-            s for s in self._traverse_and_apply(
+            s
+            for s in self._traverse_and_apply(
                 node_fun=lambda s, h: "       " * h + s.name if s is not None else "",
-                edge_fun=lambda s, t, c, h: "       " * h + f"  {c} -> {t.name}"
-            ) if len(s) > 0
+                edge_fun=lambda s, t, c, h: "       " * h + f"  {c} -> {t.name}",
+            )
+            if len(s) > 0
         )
 
     def _traverse_and_apply(
-            self,
-            node_fun: Callable[[Optional[NFAState], Optional[int]], Any],
-            edge_fun: Callable[[NFAState, NFAState, Any, Optional[int]], Any]
+        self,
+        node_fun: Callable[[Optional[NFAState], Optional[int]], Any],
+        edge_fun: Callable[[NFAState, NFAState, Any, Optional[int]], Any],
     ) -> List[Any]:
         def helper(state: NFAState, visited: Set[str], hierarchy: int) -> Any:
             if state.name in visited:
@@ -68,10 +83,21 @@ class NFA:
         return helper(self.initial, set(), 0)
 
     def to_dfa(self) -> "DFA":
+        """Converts the NFA to a DFA.
+
+        :return: a DFA accepting the same language as the NFA
+        """
         return nfa_to_dfa(self)
 
 
 class DFA:
+    """A class representing a DFA.
+
+    :param initial: the initial state of the DFA
+    :param current: the current state of the DFA
+    :param alphabet: the alphabet of the DFA
+    """
+
     initial: DFAState
     current: DFAState
     alphabet: List[Union[str, int]]
@@ -81,59 +107,83 @@ class DFA:
         self.current = initial
         self.alphabet = alphabet
 
-    def process(self, x: Any) -> None:
-        self.current = self.current.transition(x)
+    def forward(self, symbol: Any) -> None:
+        """Perform one transition of the DFA.
+
+        :param symbol: the symbol used to transition
+        """
+        self.current = self.current.transition(symbol)
+
+    def reset(self) -> None:
+        """Resets the DFA to its initial state."""
+        self.current = self.initial
 
     def accept(self, sequence: Sequence) -> bool:
+        """Checks if the DFA is accepting the given sequence.
+
+        :param sequence: the sequence to be checked
+        :return: True if the DFA is accepting the given sequence, False otherwise
+        """
         return self._accept(sequence)
 
     def _accept(self, sequence: Sequence) -> bool:
         if len(sequence) == 0 and self.current.accepting:
-            self.current = self.initial
+            self.reset()
             return True
         elif len(sequence) == 0:
-            self.current = self.initial
+            self.reset()
             return False
 
         char = sequence[0]
         if char not in self.current.transitions:
-            self.current = self.initial
+            self.reset()
             return False
 
         self.current = self.current.transitions[char]
         return self._accept(sequence[1:])
 
     @property
-    def states(self) -> List[DFAState]:
-        return list(self._traversal({self.initial}, self.initial))
+    def is_complete(self) -> bool:
+        """Checks if the DFA is complete (each state has all possible transitions).
 
-    def _traversal(self, result: Set[DFAState], current: DFAState) -> Set[DFAState]:
-        for name, node in current.transitions.items():
-            if node not in result:
-                result.add(node)
-                node_traversal = self._traversal(result, node)
-                result = result.union(node_traversal)
-        return result
+        :return: True if the DFA is complete, False otherwise
+        """
+        return all(
+            [
+                len(set(self.alphabet).difference(state.transitions.keys())) == 0
+                for state in self.states
+            ]
+        )
 
     @property
-    def complete(self) -> bool:
-        return all([
-            len(set(self.alphabet).difference(state.transitions.keys())) == 0
-            for state in self.states
-        ])
+    def states(self) -> Set[DFAState]:
+        """Returns a set of all states of the DFA.
+
+        :return: a set of all states of the DFA
+        """
+        return set(
+            s
+            for s in self._traverse_and_apply(
+                node_fun=lambda s, h: s,
+                edge_fun=lambda s, t, c, h: None,
+            )
+            if s is not None
+        )
 
     def __repr__(self) -> str:
         return "\n".join(
-            s for s in self._traverse_and_apply(
+            s
+            for s in self._traverse_and_apply(
                 node_fun=lambda s, h: "       " * h + s.name if s is not None else "",
-                edge_fun=lambda s, t, c, h: "       " * h + f"  {c} -> {t.name}"
-            ) if len(s) > 0
+                edge_fun=lambda s, t, c, h: "       " * h + f"  {c} -> {t.name}",
+            )
+            if len(s) > 0
         )
 
     def _traverse_and_apply(
         self,
         node_fun: Callable[[Optional[DFAState], Optional[int]], Any],
-        edge_fun: Callable[[DFAState, DFAState, Any, Optional[int]], Any]
+        edge_fun: Callable[[DFAState, DFAState, Any, Optional[int]], Any],
     ) -> List[Any]:
         def helper(state: DFAState, visited: Set[str], hierarchy: int) -> Any:
             if state.name in visited:
@@ -151,40 +201,21 @@ class DFA:
 
     @classmethod
     def from_nfa(cls, nfa: NFA) -> "DFA":
+        """Construct a DFA from a NFA.
+
+        :param nfa: a NFA
+        :return: a DFA accepting the same language as the NFA
+        """
         return nfa_to_dfa(nfa)
 
 
-class MooreMachine:
-    initial: MooreState
-    current: MooreState
-    alphabet: List[Any]
-
-    def __init__(self, initial: MooreState, alphabet: List[Any]) -> None:
-        self.initial = initial
-        self.current = initial
-        self.alphabet = alphabet
-
-    def forward(self, x: Any) -> Any:
-        self.current = self.current.transition(x)
-        return self.current.output
-
-
-class MealyMachine:
-    initial: MealyState
-    current: MealyState
-    alphabet: List[Any]
-
-    def __init__(self, initial: MealyState, alphabet: List[Any]) -> None:
-        self.initial = initial
-        self.current = initial
-        self.alphabet = alphabet
-
-    def forward(self, x: Any) -> Any:
-        self.current, output = self.current.transition(x)
-        return output
-
-
 def nfa_eclosure(nfa: NFA, sub: Set[NFAState]) -> Set[NFAState]:
+    """Helper function for creating a DFA from an NFA.
+
+    :param nfa: a NFA
+    :param sub: a subset of NFA states
+    :return: a set of states that are reachable from the subset of NFA states using only transitions on empty symbols
+    """
     states = set()
     states.update(sub)
     for state in sub:
@@ -195,6 +226,13 @@ def nfa_eclosure(nfa: NFA, sub: Set[NFAState]) -> Set[NFAState]:
 
 
 def nfa_move(sub: Set[NFAState], char: str) -> Set[NFAState]:
+    """Helper function for creating a DFA from an NFA.
+
+    :param sub: a subset of NFA states
+    :param char: the symbol used to transition
+    :return: a set of states that are directly accessible from the subset of NFA states using transitions
+        on the given symbol
+    """
     states = set()
     for state in sub:
         for target_state in state.transitions[char]:
@@ -203,6 +241,11 @@ def nfa_move(sub: Set[NFAState], char: str) -> Set[NFAState]:
 
 
 def nfa_to_dfa(nfa: NFA) -> DFA:
+    """Converts a NFA into a DFA.
+
+    :param nfa: a NFA
+    :return: a DFA accepting the same language as the NFA
+    """
     unmarked = []  # here live NFA+DFA states
     new_states = dict()  # here live DFA states
 
@@ -241,7 +284,12 @@ def nfa_to_dfa(nfa: NFA) -> DFA:
 
 
 def complete_dfa(dfa: DFA) -> DFA:
-    if dfa.complete:
+    """A helper function for minimizing DFA.
+
+    :param dfa: a DFA
+    :return: a complete DFA
+    """
+    if dfa.is_complete:
         return deepcopy(dfa)
     else:
         new_dfa = deepcopy(dfa)
@@ -253,129 +301,3 @@ def complete_dfa(dfa: DFA) -> DFA:
                 state.transitions[symbol] = q
 
         return new_dfa
-
-
-if __name__ == "__main__":
-    # NFA
-    p = NFAState(name="p", initial=True)
-    q = NFAState(name="q", accepting=True)
-
-    p.add_transition(0, p)
-    p.add_transition(1, {p, q})
-
-    machine = NFA(initial=p, alphabet=[0, 1], empty_char=-1)
-    print(machine)
-    assert not machine.accept([1, 0])
-    assert machine.accept([1, 0, 1, 1])
-
-    # NFA with empty states
-    # (a|b)*abb
-    q0 = NFAState(name="0", initial=True)
-    q1 = NFAState(name="1")
-    q2 = NFAState(name="2")
-    q3 = NFAState(name="3")
-    q4 = NFAState(name="4")
-    q5 = NFAState(name="5")
-    q6 = NFAState(name="6")
-    q7 = NFAState(name="7")
-    q8 = NFAState(name="8")
-    q9 = NFAState(name="9")
-    q10 = NFAState(name="10", accepting=True)
-
-    q0.add_transition("~", {q1, q7})
-    q1.add_transition("~", {q2, q4})
-    q2.add_transition("a", q3)
-    q3.add_transition("~", q6)
-    q4.add_transition("b", q5)
-    q5.add_transition("~", q6)
-    q6.add_transition("~", {q7, q1})
-    q7.add_transition("~", q8)
-    q8.add_transition("b", q9)
-    q9.add_transition("b", q10)
-
-    machine = NFA(initial=q0, alphabet=["a", "b"], empty_char="~")
-    print(machine)
-    assert not machine.accept("")
-    assert not machine.accept("aab")
-    assert not machine.accept("aba")
-    assert machine.accept("abb")
-    assert machine.accept("aaaabb")
-    assert not machine.accept("babba")
-    assert machine.accept("bbbabb")
-
-    machine2 = nfa_to_dfa(machine)
-    print(machine2)
-    assert not machine2.accept("")
-    assert not machine2.accept("aab")
-    assert not machine2.accept("aba")
-    assert machine2.accept("abb")
-    assert machine2.accept("aaaabb")
-    assert not machine2.accept("babba")
-    assert machine2.accept("bbbabb")
-
-    machine3 = complete_dfa(dfa=machine2)
-
-    # # DFA
-    # # ab*ba
-    q0 = DFAState(name="q0", initial=True)
-    q1 = DFAState(name="q1")
-    q2 = DFAState(name="q2")
-    q3 = DFAState(name="q3", accepting=True)
-
-    q0.add_transition("a", q1)
-    q1.add_transition("b", q2)
-    q2.add_transition("b", q2)
-    q2.add_transition("a", q3)
-
-    machine = DFA(initial=q0, alphabet=["a", "b"])
-    print(machine)
-    assert not machine.accept("")
-    assert not machine.accept("aab")
-    assert machine.accept("aba")
-    assert not machine.accept("aa")
-    assert not machine.accept("abb")
-
-    # # even num of 0s
-    # # (1*01*01*)*
-    q0 = DFAState(name="q0", initial=True, accepting=True)
-    q1 = DFAState(name="q1")
-    q2 = DFAState(name="q2")
-    q3 = DFAState(name="q3")
-    q4 = DFAState(name="q4", accepting=True)
-    q5 = DFAState(name="q5", accepting=True)
-
-    q0.add_transition(1, q1)
-    q0.add_transition(0, q2)
-    q1.add_transition(1, q1)
-    q1.add_transition(0, q2)
-    q2.add_transition(1, q3)
-    q2.add_transition(0, q4)
-    q3.add_transition(1, q3)
-    q3.add_transition(0, q4)
-    q4.add_transition(1, q5)
-    q4.add_transition(0, q2)
-    q5.add_transition(1, q5)
-    q5.add_transition(0, q2)
-
-    machine = DFA(initial=q0, alphabet=[0, 1])
-    assert machine.accept([])
-    assert not machine.accept([0])
-    assert not machine.accept([1])
-    assert not machine.accept([0, 1])
-    assert machine.accept([0, 0])
-    assert not machine.accept([1, 1])
-    assert not machine.accept([1, 0, 1])
-    assert machine.accept([1, 0, 1, 0])
-    assert machine.accept([1, 0, 0, 1])
-    print(machine)
-
-    q0 = MealyState("q0")
-    q1 = MealyState("q1")
-
-    q0.add_transition("a", q0, output_fun=lambda x: "Normal operation")
-    q0.add_transition("b", q1, output_fun=lambda x: "Detected erroneous input")
-    q1.add_transition("b", q1, output_fun=lambda x: "Clearing erroneous input")
-    q1.add_transition("a", q0, output_fun=lambda x: "Returning to normal operation")
-
-    machine = MealyMachine(initial=q0, alphabet=["a", "b"])
-    
